@@ -942,9 +942,9 @@ o+='<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="'+escXML(lang)+'" lang=
 o+='<head>\n<meta charset="utf-8"/>\n';
 o+='<title>'+escXML(title)+' — Страница '+pageNum+'</title>\n';
 o+='<meta name="viewport" content="width='+w+', height='+h+'"/>\n';
-o+='<style>html,body{margin:0;padding:0}img{display:block;width:100%;height:auto}</style>\n';
+o+='<style>html,body{margin:0;padding:0;height:100%;background:#fff}body{display:flex;align-items:center;justify-content:center}svg{display:block;width:100%;height:100%}</style>\n';
 o+='</head>\n<body>\n';
-o+='<img src="images/page-'+pageNum+'.jpg" alt="Страница '+pageNum+'"/>\n';
+o+='<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%" height="100%" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid meet"><image width="'+w+'" height="'+h+'" xlink:href="images/page-'+pageNum+'.jpg"/></svg>\n';
 o+='</body>\n</html>';
 return o;
 }
