@@ -227,6 +227,19 @@ to{transform:translateX(100%)}
 *,*::before,*::after{animation-duration:0.01ms !important;transition-duration:0.01ms !important}
 }
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+.mode-switch{border:none;margin:0 0 1.5rem;padding:0;display:flex;flex-direction:column;gap:.5rem}
+.mode-option{
+display:flex;align-items:flex-start;gap:.65rem;
+padding:.75rem 1rem;border-radius:12px;cursor:pointer;
+border:1.5px solid var(--border);background:transparent;
+transition:border-color var(--transition-base),background var(--transition-base);
+}
+.mode-option.selected{border-color:var(--brass);background:rgba(224,168,106,0.07)}
+.mode-option:focus-within{outline:2px solid var(--brass);outline-offset:2px}
+.mode-option input[type="radio"]{margin-top:.25rem;accent-color:var(--brass);flex-shrink:0;width:16px;height:16px}
+.mode-label{display:flex;flex-direction:column;gap:.15rem}
+.mode-label strong{font-size:.95rem;font-weight:600;color:var(--ink)}
+.mode-label small{font-size:.82rem;color:var(--ink-muted);line-height:1.4}
 </style>
 </head>
 <body>
@@ -292,6 +305,23 @@ to{transform:translateX(100%)}
 <option value="es">Espa&#xf1;ol</option>
 </select>
 </div>
+<fieldset class="mode-switch" id="mode-switch">
+<legend class="sr-only">Режим конвертации</legend>
+<label class="mode-option selected" id="mode-opt-fixed">
+<input type="radio" name="convert-mode" value="fixed" checked/>
+<span class="mode-label">
+<strong>Точная копия страниц</strong>
+<small>как в PDF: картинки и вёрстка сохранены, текст не выделяется</small>
+</span>
+</label>
+<label class="mode-option" id="mode-opt-text">
+<input type="radio" name="convert-mode" value="text"/>
+<span class="mode-label">
+<strong>Текст (перетекаемый)</strong>
+<small>лёгкий текст для читалки; картинки и точная вёрстка не сохраняются</small>
+</span>
+</label>
+</fieldset>
 <div class="form-actions">
 <button class="btn btn-primary" type="button" id="btn-convert">
 <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M3 9h12M9 3l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -337,7 +367,7 @@ to{transform:translateX(100%)}
 </div>
 <div class="how-item">
 <svg viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="3" y="2" width="16" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/><line x1="7" y1="7" x2="15" y2="7" stroke="currentColor" stroke-width="1.2"/><line x1="7" y1="11" x2="15" y2="11" stroke="currentColor" stroke-width="1.2"/><line x1="7" y1="15" x2="12" y2="15" stroke="currentColor" stroke-width="1.2"/></svg>
-<p><strong>Извлекаем текст</strong> постранично</p>
+<p><strong>Два режима:</strong> «Точная копия» — страницы-картинки с вёрсткой; «Текст» — перетекаемый текст для читалки</p>
 </div>
 <div class="how-item">
 <svg viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="3" y="1" width="10" height="15" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="6" width="10" height="15" rx="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
@@ -346,7 +376,7 @@ to{transform:translateX(100%)}
 </section>
 
 <footer class="footer">
-EPUB 3 · работает офлайн после загрузки · сканы (картинки) без OCR не дадут текст
+EPUB 3 · «Точная копия» сохранит картинки и вёрстку · «Текст» — лёгкий перетекаемый · работает офлайн
 </footer>
 
 </div>
@@ -382,6 +412,14 @@ var $doneFile=document.getElementById("done-filename");
 var $btnDown=document.getElementById("btn-download");
 var $btnReset=document.getElementById("btn-reset");
 var $ariaStatus=document.getElementById("aria-status");
+
+var $modeRadios=document.querySelectorAll('input[name="convert-mode"]');
+$modeRadios.forEach(function(radio){
+radio.addEventListener("change",function(){
+document.getElementById("mode-opt-fixed").classList.toggle("selected",document.querySelector('input[name="convert-mode"][value="fixed"]').checked);
+document.getElementById("mode-opt-text").classList.toggle("selected",document.querySelector('input[name="convert-mode"][value="text"]').checked);
+});
+});
 
 var pdfDoc=null,pdfFileName="",epubBlobUrl=null,epubFileName="";
 
@@ -460,6 +498,72 @@ var title=$inpTitle.value.trim()||"book";
 var author=$inpAuthor.value.trim();
 var lang=$inpLang.value;
 var N=pdfDoc.numPages;
+var modeEl=document.querySelector('input[name="convert-mode"]:checked');
+var mode=modeEl?modeEl.value:"fixed";
+
+var uuid=crypto.randomUUID();
+var now=new Date();
+var isoDate=now.toISOString().replace(/\.\d{3}Z$/,"Z");
+var dateOnly=now.toISOString().slice(0,10);
+
+var zip=new JSZip();
+
+zip.file("mimetype","application/epub+zip",{compression:"STORE"});
+
+zip.file("META-INF/container.xml",
+'<?xml version="1.0" encoding="utf-8"?>\n'+
+'<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n'+
+'  <rootfiles>\n'+
+'    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>\n'+
+'  </rootfiles>\n'+
+'</container>'
+);
+
+if(mode==="fixed"){
+
+var canvas=document.createElement("canvas");
+var ctx=canvas.getContext("2d");
+var pageDims=[];
+
+for(var i=1;i<=N;i++){
+$statusText.textContent="Обработка страницы "+i+" из "+N;
+$ariaStatus.textContent="Обработка страницы "+i+" из "+N;
+$progressBar.style.width=(i/N*100).toFixed(1)+"%";
+
+var page=await pdfDoc.getPage(i);
+var base=page.getViewport({scale:1});
+var scale=Math.min(2,Math.max(1.3,1600/base.width));
+var vp=page.getViewport({scale:scale});
+
+canvas.width=Math.round(vp.width);
+canvas.height=Math.round(vp.height);
+
+ctx.fillStyle="#ffffff";
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+await page.render({canvasContext:ctx,viewport:vp,background:"#ffffff"}).promise;
+
+var blob=await new Promise(function(res){canvas.toBlob(res,"image/jpeg",0.85);});
+var ab=await blob.arrayBuffer();
+zip.file("OEBPS/images/page-"+i+".jpg",ab);
+
+pageDims.push({w:canvas.width,h:canvas.height});
+
+var xhtml=buildFixedPageXHTML(i,canvas.width,canvas.height,title,lang);
+zip.file("OEBPS/page-"+i+".xhtml",xhtml);
+
+if(i%2===0)await new Promise(function(r){setTimeout(r);});
+}
+
+$statusText.textContent="Собираем EPUB…";
+await new Promise(function(r){setTimeout(r);});
+
+zip.file("OEBPS/nav.xhtml",buildNav(N,title,lang));
+zip.file("OEBPS/toc.ncx",buildNCX(N,title,uuid));
+zip.file("OEBPS/content.opf",buildFixedOPF(N,title,author,lang,uuid,isoDate,dateOnly,pageDims));
+
+}else{
+
 var anyText=false;
 var pages=[];
 
@@ -480,31 +584,13 @@ if(i%3===0)await new Promise(function(r){setTimeout(r);});
 }
 
 if(!anyText){
-$warningText.textContent="Не удалось извлечь текст — вероятно, это сканированный PDF. Файл будет создан, но окажется пустым.";
+$warningText.textContent="Не удалось извлечь текст — вероятно, это сканированный PDF. Попробуйте режим «Точная копия страниц».";
 $warningText.style.display="block";
 await new Promise(function(r){setTimeout(r,50);});
 }
 
 $statusText.textContent="Собираем EPUB…";
 await new Promise(function(r){setTimeout(r);});
-
-var uuid=crypto.randomUUID();
-var now=new Date();
-var isoDate=now.toISOString().replace(/\.\d{3}Z$/,"Z");
-var dateOnly=now.toISOString().slice(0,10);
-
-var zip=new JSZip();
-
-zip.file("mimetype","application/epub+zip",{compression:"STORE"});
-
-zip.file("META-INF/container.xml",
-'<?xml version="1.0" encoding="utf-8"?>\n'+
-'<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n'+
-'  <rootfiles>\n'+
-'    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>\n'+
-'  </rootfiles>\n'+
-'</container>'
-);
 
 zip.file("OEBPS/style.css",epubCSS());
 zip.file("OEBPS/nav.xhtml",buildNav(N,title,lang));
@@ -513,6 +599,8 @@ zip.file("OEBPS/content.opf",buildOPF(N,title,author,lang,uuid,isoDate,dateOnly)
 
 for(var p=0;p<pages.length;p++){
 zip.file("OEBPS/page-"+(p+1)+".xhtml",pages[p]);
+}
+
 }
 
 var blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip"});
@@ -559,6 +647,7 @@ if(curLine.length)lines.push({items:curLine.slice(),y:prevY});
 
 for(var l=0;l<lines.length;l++){
 lines[l].items.sort(function(a,b){return a.x-b.x;});
+lines[l].startX=lines[l].items.length?lines[l].items[0].x:0;
 }
 
 var gaps=[];
@@ -567,29 +656,37 @@ var g=Math.abs(lines[l].y-lines[l-1].y);
 if(g>0)gaps.push(g);
 }
 gaps.sort(function(a,b){return a-b;});
-// line height ~ lower quartile of line gaps: robust even when many
-// paragraph-sized gaps are present (median would over-estimate and under-split)
 var lineGap=gaps.length?gaps[Math.floor(gaps.length*0.25)]:14;
+
+var allStartX=[];
+for(var l=0;l<lines.length;l++){allStartX.push(lines[l].startX);}
+allStartX.sort(function(a,b){return a-b;});
+var bodyLeft=allStartX.length?allStartX[Math.floor(allStartX.length/2)]:0;
 
 var paragraphs=[];
 if(!lines.length)return paragraphs;
+
 var curPara=lineToString(lines[0]);
+var curIndented=(lines[0].startX-bodyLeft)>8;
 
 for(var l=1;l<lines.length;l++){
 var vGap=Math.abs(lines[l].y-lines[l-1].y);
 var lineStr=lineToString(lines[l]);
 if(!lineStr)continue;
 
-if(vGap>lineGap*1.5){
+var lineIndented=(lines[l].startX-bodyLeft)>8;
+
+if(lineIndented||vGap>lineGap*1.5){
 var trimmed=collapseWS(curPara);
-if(trimmed)paragraphs.push(trimmed);
+if(trimmed)paragraphs.push({text:trimmed,indented:curIndented});
 curPara=lineStr;
+curIndented=lineIndented;
 }else{
 curPara+=" "+lineStr;
 }
 }
 var finalTrimmed=collapseWS(curPara);
-if(finalTrimmed)paragraphs.push(finalTrimmed);
+if(finalTrimmed)paragraphs.push({text:finalTrimmed,indented:curIndented});
 
 return paragraphs;
 }
@@ -639,7 +736,10 @@ if(!paragraphs.length){
 o+='<p class="empty">(на этой странице нет извлекаемого текста)</p>\n';
 }else{
 for(var p=0;p<paragraphs.length;p++){
-o+='<p>'+escXML(paragraphs[p])+'</p>\n';
+var para=paragraphs[p];
+var txt=typeof para==="string"?para:para.text;
+var ind=typeof para==="object"&&para.indented;
+o+='<p'+(ind?' class="indent"':'')+'>'+ escXML(txt)+'</p>\n';
 }
 }
 
@@ -651,7 +751,8 @@ function epubCSS(){
 return'body{font-family:Georgia,"Times New Roman",serif;line-height:1.6;margin:1em 1.5em;color:#222;}\n'+
 'h1{font-size:1.8em;margin:1em 0 0.3em;text-align:center;}\n'+
 'h2{font-size:1.2em;margin:1.5em 0 0.5em;color:#555;border-bottom:1px solid #ddd;padding-bottom:0.3em;}\n'+
-'p{margin:0.6em 0;text-align:justify;text-indent:1.2em;}\n'+
+'p{margin:0.55em 0;text-align:justify;text-indent:0;}\n'+
+'p.indent{margin:0;text-indent:1.5em;}\n'+
 '.title-block{text-align:center;margin:2em 0 1em;}\n'+
 '.title-block h1{font-size:2em;}\n'+
 '.author{font-style:italic;font-size:1.1em;color:#666;margin-top:0.3em;}\n'+
@@ -711,6 +812,53 @@ s+='</manifest>\n';
 s+='<spine toc="ncx">\n';
 for(var i=1;i<=N;i++){
 s+='<itemref idref="page-'+i+'"/>\n';
+}
+s+='</spine>\n';
+s+='</package>';
+return s;
+}
+
+function buildFixedPageXHTML(pageNum,w,h,title,lang){
+var o='<?xml version="1.0" encoding="utf-8"?>\n';
+o+='<!DOCTYPE html>\n';
+o+='<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="'+escXML(lang)+'" lang="'+escXML(lang)+'">\n';
+o+='<head>\n<meta charset="utf-8"/>\n';
+o+='<title>'+escXML(title)+' — Страница '+pageNum+'</title>\n';
+o+='<meta name="viewport" content="width='+w+', height='+h+'"/>\n';
+o+='<style>html,body{margin:0;padding:0}img{display:block;width:100%;height:auto}</style>\n';
+o+='</head>\n<body>\n';
+o+='<img src="images/page-'+pageNum+'.jpg" alt="Страница '+pageNum+'"/>\n';
+o+='</body>\n</html>';
+return o;
+}
+
+function buildFixedOPF(N,title,author,lang,uuid,isoDate,dateOnly,pageDims){
+var s='<?xml version="1.0" encoding="utf-8"?>\n';
+s+='<package version="3.0" unique-identifier="bookid" xmlns="http://www.idpf.org/2007/opf" prefix="rendition: http://www.idpf.org/vocab/rendition/#">\n';
+s+='<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">\n';
+s+='<dc:identifier id="bookid">urn:uuid:'+uuid+'</dc:identifier>\n';
+s+='<dc:title>'+escXML(title)+'</dc:title>\n';
+if(author)s+='<dc:creator>'+escXML(author)+'</dc:creator>\n';
+s+='<dc:language>'+escXML(lang)+'</dc:language>\n';
+s+='<dc:date>'+dateOnly+'</dc:date>\n';
+s+='<meta property="dcterms:modified">'+isoDate+'</meta>\n';
+s+='<meta property="rendition:layout">pre-paginated</meta>\n';
+s+='<meta property="rendition:orientation">auto</meta>\n';
+s+='<meta property="rendition:spread">auto</meta>\n';
+s+='</metadata>\n';
+
+s+='<manifest>\n';
+s+='<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>\n';
+s+='<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>\n';
+for(var i=1;i<=N;i++){
+s+='<item id="page-'+i+'" href="page-'+i+'.xhtml" media-type="application/xhtml+xml"/>\n';
+s+='<item id="img-'+i+'" href="images/page-'+i+'.jpg" media-type="image/jpeg"/>\n';
+}
+s+='</manifest>\n';
+
+s+='<spine toc="ncx">\n';
+for(var i=1;i<=N;i++){
+s+='<itemref idref="page-'+i+'" properties="rendition:layout-pre-paginated"/>\n';
 }
 s+='</spine>\n';
 s+='</package>';
