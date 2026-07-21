@@ -227,6 +227,17 @@ to{transform:translateX(100%)}
 *,*::before,*::after{animation-duration:0.01ms !important;transition-duration:0.01ms !important}
 }
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+.batch-link{display:inline-block;margin-top:.75rem;font-size:.88rem;color:var(--ink-muted);background:none;border:none;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(224,168,106,0.3);text-underline-offset:3px;font-family:var(--font-ui);transition:color var(--transition-base)}
+.batch-link:hover{color:var(--brass)}
+.batch-link:focus-visible{outline:2px solid var(--brass);outline-offset:3px;border-radius:4px}
+.batch-file-list{max-height:240px;overflow-y:auto;margin:1rem 0;display:flex;flex-direction:column;gap:.4rem}
+.batch-row{display:flex;align-items:center;gap:.75rem;padding:.55rem .75rem;background:var(--surface-2);border-radius:10px;border:1px solid var(--border)}
+.batch-row-name{font-size:.9rem;font-weight:500;word-break:break-all;flex:1;text-align:left}
+.batch-row-size{font-size:.82rem;color:var(--ink-muted);white-space:nowrap}
+.batch-row-remove{padding:.3rem .6rem !important;min-height:auto !important;font-size:.82rem !important;line-height:1}
+.batch-results-list{text-align:left;display:flex;flex-direction:column;gap:.4rem;max-height:300px;overflow-y:auto}
+.batch-result-row{display:flex;align-items:center;gap:.75rem;padding:.55rem .75rem;background:var(--surface-2);border-radius:10px;border:1px solid var(--border)}
+.batch-error-note{font-size:.82rem;color:var(--terra);flex-shrink:0}
 .mode-switch{border:none;margin:0 0 1.5rem;padding:0;display:flex;flex-direction:column;gap:.5rem}
 .mode-option{
 display:flex;align-items:flex-start;gap:.65rem;
@@ -276,7 +287,9 @@ transition:border-color var(--transition-base),background var(--transition-base)
 <p class="drop-zone-title">Перетащите PDF сюда</p>
 <p class="drop-zone-or">или</p>
 <button class="btn btn-primary btn-small" type="button" id="btn-pick" aria-label="Выбрать файл">Выбрать файл</button>
-<input type="file" accept=".pdf,application/pdf" class="file-input" id="file-input" aria-label="Выбрать PDF файл"/>
+<input type="file" multiple accept=".pdf,application/pdf" class="file-input" id="file-input" aria-label="Выбрать PDF файл"/>
+<br/><button class="batch-link" type="button" id="btn-batch-pick" aria-label="Загрузить несколько PDF для пакетной обработки">Загрузить несколько PDF</button>
+<input type="file" multiple accept=".pdf,application/pdf" class="file-input" id="file-input-batch" aria-label="Выбрать несколько PDF файлов"/>
 </div>
 <div class="error-box" id="error-initial"></div>
 </div>
@@ -356,6 +369,74 @@ transition:border-color var(--transition-base),background var(--transition-base)
 </div>
 </div>
 
+<div id="state-batch-list" style="display:none">
+<h3 class="done-title" id="batch-heading">Пакетная обработка</h3>
+<div class="batch-file-list" id="batch-file-list"></div>
+<button class="btn btn-ghost btn-small" type="button" id="btn-batch-add-more" style="margin-bottom:1.25rem">+ Добавить ещё</button>
+<div class="form-group">
+<label for="batch-inp-author">Автор</label>
+<input type="text" id="batch-inp-author" autocomplete="off"/>
+</div>
+<div class="form-group">
+<label for="batch-inp-lang">Язык</label>
+<select id="batch-inp-lang">
+<option value="ru" selected>Русский</option>
+<option value="en">English</option>
+<option value="de">Deutsch</option>
+<option value="fr">Fran&#xe7;ais</option>
+<option value="es">Espa&#xf1;ol</option>
+</select>
+</div>
+<fieldset class="mode-switch">
+<legend class="sr-only">Режим конвертации</legend>
+<label class="mode-option selected" id="batch-mode-opt-fixed">
+<input type="radio" name="batch-convert-mode" value="fixed" checked id="batch-mode-opt-fixed-radio"/>
+<span class="mode-label">
+<strong>Точная копия страниц</strong>
+<small>как в PDF: картинки и вёрстка сохранены, текст не выделяется</small>
+</span>
+</label>
+<label class="mode-option" id="batch-mode-opt-text">
+<input type="radio" name="batch-convert-mode" value="text" id="batch-mode-opt-text-radio"/>
+<span class="mode-label">
+<strong>Текст (перетекаемый)</strong>
+<small>лёгкий текст для читалки; картинки и точная вёрстка не сохраняются</small>
+</span>
+</label>
+</fieldset>
+<div class="form-actions">
+<button class="btn btn-primary" type="button" id="btn-batch-convert">Конвертировать все (0)</button>
+<button class="btn btn-ghost btn-small" type="button" id="btn-batch-cancel">&#x2190; отмена</button>
+</div>
+<div class="error-box" id="error-batch"></div>
+</div>
+
+<div id="state-batch-converting" style="display:none;text-align:center;padding:1.5rem 0">
+<p class="status-text" id="batch-conv-overall">Файл 1 из 0</p>
+<p class="status-text" id="batch-conv-page" style="margin-top:.5rem;font-size:.88rem">Подготовка&#x2026;</p>
+<div class="progress-track"><div class="progress-bar" id="batch-progress-bar"></div></div>
+</div>
+
+<div id="state-batch-done" style="display:none;text-align:center;padding:1rem 0">
+<div class="done-icon">
+<svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<circle cx="28" cy="28" r="24" stroke="currentColor" stroke-width="2" fill="rgba(224,168,106,0.08)"/>
+<path d="M18 28l7 7 13-13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</div>
+<h3 class="done-title" id="batch-done-heading">Готово</h3>
+<div style="margin:1.25rem 0">
+<button class="btn btn-primary" type="button" id="btn-batch-download-all">
+<svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M9 3v9m0 0l-4-4m4 4l4-4M3 15h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+Скачать всё (.zip)
+</button>
+</div>
+<div class="batch-results-list" id="batch-results-list"></div>
+<div class="done-actions" style="margin-top:1.25rem">
+<button class="btn btn-ghost btn-small" type="button" id="btn-batch-reset">Обработать другой пакет</button>
+</div>
+</div>
+
 </div>
 
 <div aria-live="polite" class="sr-only" id="aria-status"></div>
@@ -373,10 +454,14 @@ transition:border-color var(--transition-base),background var(--transition-base)
 <svg viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="3" y="1" width="10" height="15" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="6" width="10" height="15" rx="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
 <p><strong>Собираем валидный EPUB 3</strong></p>
 </div>
+<div class="how-item">
+<svg viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="2" y="2" width="8" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="7" y="4" width="8" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="12" y="6" width="8" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+<p><strong>Пакетная обработка</strong> &#x2014; загрузите несколько PDF и скачайте все EPUB разом в одном .zip</p>
+</div>
 </section>
 
 <footer class="footer">
-EPUB 3 · «Точная копия» сохранит картинки и вёрстку · «Текст» — лёгкий перетекаемый · работает офлайн
+EPUB 3 · «Точная копия» сохранит картинки и вёрстку · «Текст» — лёгкий перетекаемый · пакетная обработка нескольких PDF · работает офлайн
 </footer>
 
 </div>
@@ -412,6 +497,12 @@ var $doneFile=document.getElementById("done-filename");
 var $btnDown=document.getElementById("btn-download");
 var $btnReset=document.getElementById("btn-reset");
 var $ariaStatus=document.getElementById("aria-status");
+var $stateBatchList=document.getElementById("state-batch-list");
+var $stateBatchConverting=document.getElementById("state-batch-converting");
+var $stateBatchDone=document.getElementById("state-batch-done");
+var $errorBatch=document.getElementById("error-batch");
+var batchFiles=[];
+var batchResults=[];
 
 var $modeRadios=document.querySelectorAll('input[name="convert-mode"]');
 $modeRadios.forEach(function(radio){
@@ -428,8 +519,12 @@ $stateInit.style.display=name==="initial"?"block":"none";
 $stateDet.className="details"+(name==="details"?" visible":"");
 $stateConv.className="converting"+(name==="converting"?" visible":"");
 $stateDone.className="done"+(name==="done"?" visible":"");
+$stateBatchList.style.display=name==="batch-list"?"block":"none";
+$stateBatchConverting.style.display=name==="batch-converting"?"block":"none";
+$stateBatchDone.style.display=name==="batch-done"?"block":"none";
 $errorInit.className="error-box";
 $errorDet.className="error-box";
+$errorBatch.className="error-box";
 $warningText.style.display="none";
 }
 
@@ -447,10 +542,12 @@ $dropZone.addEventListener(ev,function(e){e.preventDefault();$dropZone.classList
 });
 $dropZone.addEventListener("drop",function(e){
 var files=e.dataTransfer.files;
-if(files.length)handleFile(files[0]);
+if(!files.length)return;
+if(files.length>1){addBatchFiles(files);}else{handleFile(files[0]);}
 });
 $fileInput.addEventListener("change",function(){
-if($fileInput.files.length)handleFile($fileInput.files[0]);
+if(!$fileInput.files.length)return;
+if($fileInput.files.length>1){addBatchFiles($fileInput.files);$fileInput.value="";}else{handleFile($fileInput.files[0]);}
 });
 
 async function handleFile(file){
@@ -490,16 +587,10 @@ pdfDoc=null;$fileInput.value="";showState("initial");
 
 $btnConvert.addEventListener("click",startConvert);
 
-async function startConvert(){
-try{
-showState("converting");
-$btnConvert.disabled=true;
-var title=$inpTitle.value.trim()||"book";
-var author=$inpAuthor.value.trim();
-var lang=$inpLang.value;
+async function convertPdfToEpub(pdfDoc,opts){
+var mode=opts.mode,title=opts.title,author=opts.author,lang=opts.lang;
+var onProgress=opts.onProgress||function(){};
 var N=pdfDoc.numPages;
-var modeEl=document.querySelector('input[name="convert-mode"]:checked');
-var mode=modeEl?modeEl.value:"fixed";
 
 var uuid=crypto.randomUUID();
 var now=new Date();
@@ -519,6 +610,8 @@ zip.file("META-INF/container.xml",
 '</container>'
 );
 
+var anyText=true;
+
 if(mode==="fixed"){
 
 var canvas=document.createElement("canvas");
@@ -526,13 +619,12 @@ var ctx=canvas.getContext("2d");
 var pageDims=[];
 
 for(var i=1;i<=N;i++){
-$statusText.textContent="Обработка страницы "+i+" из "+N;
-$ariaStatus.textContent="Обработка страницы "+i+" из "+N;
-$progressBar.style.width=(i/N*100).toFixed(1)+"%";
+onProgress(i,N,"pages");
 
 var page=await pdfDoc.getPage(i);
 var base=page.getViewport({scale:1});
-var scale=Math.min(2,Math.max(1.3,1600/base.width));
+var targetWidth=2200;
+var scale=Math.min(3.2,Math.max(1.6,targetWidth/base.width));
 var vp=page.getViewport({scale:scale});
 
 canvas.width=Math.round(vp.width);
@@ -552,10 +644,10 @@ pageDims.push({w:canvas.width,h:canvas.height});
 var xhtml=buildFixedPageXHTML(i,canvas.width,canvas.height,title,lang);
 zip.file("OEBPS/page-"+i+".xhtml",xhtml);
 
-if(i%2===0)await new Promise(function(r){setTimeout(r);});
+await new Promise(function(r){setTimeout(r);});
 }
 
-$statusText.textContent="Собираем EPUB…";
+onProgress(N,N,"packaging");
 await new Promise(function(r){setTimeout(r);});
 
 zip.file("OEBPS/nav.xhtml",buildNav(N,title,lang));
@@ -564,13 +656,11 @@ zip.file("OEBPS/content.opf",buildFixedOPF(N,title,author,lang,uuid,isoDate,date
 
 }else{
 
-var anyText=false;
+anyText=false;
 var pages=[];
 
 for(var i=1;i<=N;i++){
-$statusText.textContent="Обработка страницы "+i+" из "+N;
-$ariaStatus.textContent="Обработка страницы "+i+" из "+N;
-$progressBar.style.width=(i/N*100).toFixed(1)+"%";
+onProgress(i,N,"pages");
 
 var page=await pdfDoc.getPage(i);
 var tc=await page.getTextContent();
@@ -583,13 +673,7 @@ pages.push(xhtml);
 if(i%3===0)await new Promise(function(r){setTimeout(r);});
 }
 
-if(!anyText){
-$warningText.textContent="Не удалось извлечь текст — вероятно, это сканированный PDF. Попробуйте режим «Точная копия страниц».";
-$warningText.style.display="block";
-await new Promise(function(r){setTimeout(r,50);});
-}
-
-$statusText.textContent="Собираем EPUB…";
+onProgress(N,N,"packaging");
 await new Promise(function(r){setTimeout(r);});
 
 zip.file("OEBPS/style.css",epubCSS());
@@ -603,9 +687,41 @@ zip.file("OEBPS/page-"+(p+1)+".xhtml",pages[p]);
 
 }
 
-var blob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip"});
+var epubBlob=await zip.generateAsync({type:"blob",mimeType:"application/epub+zip"});
+return{blob:epubBlob,anyText:anyText};
+}
+
+async function startConvert(){
+try{
+showState("converting");
+$btnConvert.disabled=true;
+var title=$inpTitle.value.trim()||"book";
+var author=$inpAuthor.value.trim();
+var lang=$inpLang.value;
+var modeEl=document.querySelector('input[name="convert-mode"]:checked');
+var mode=modeEl?modeEl.value:"fixed";
+
+var result=await convertPdfToEpub(pdfDoc,{
+mode:mode,title:title,author:author,lang:lang,
+onProgress:function(i,total,phase){
+if(phase==="pages"){
+$statusText.textContent="Обработка страницы "+i+" из "+total;
+$ariaStatus.textContent="Обработка страницы "+i+" из "+total;
+$progressBar.style.width=(i/total*100).toFixed(1)+"%";
+}else{
+$statusText.textContent="Собираем EPUB…";
+}
+}
+});
+
+if(mode==="text"&&!result.anyText){
+$warningText.textContent="Не удалось извлечь текст — вероятно, это сканированный PDF. Попробуйте режим «Точная копия страниц».";
+$warningText.style.display="block";
+await new Promise(function(r){setTimeout(r,50);});
+}
+
 if(epubBlobUrl)URL.revokeObjectURL(epubBlobUrl);
-epubBlobUrl=URL.createObjectURL(blob);
+epubBlobUrl=URL.createObjectURL(result.blob);
 
 var safeName=sanitizeFilename(title);
 epubFileName=(safeName||"book")+".epub";
@@ -885,6 +1001,202 @@ if(epubBlobUrl)triggerDownload(epubBlobUrl,epubFileName);
 $btnReset.addEventListener("click",function(){
 pdfDoc=null;$fileInput.value="";
 if(epubBlobUrl){URL.revokeObjectURL(epubBlobUrl);epubBlobUrl=null;}
+showState("initial");
+});
+
+var $btnBatchPick=document.getElementById("btn-batch-pick");
+var $fileInputBatch=document.getElementById("file-input-batch");
+
+$btnBatchPick.addEventListener("click",function(e){e.stopPropagation();$fileInputBatch.click();});
+$fileInputBatch.addEventListener("change",function(){
+if($fileInputBatch.files.length){addBatchFiles($fileInputBatch.files);}
+$fileInputBatch.value="";
+});
+document.getElementById("btn-batch-add-more").addEventListener("click",function(){$fileInputBatch.click();});
+
+function pluralFiles(n){
+var mod10=n%10,mod100=n%100;
+if(mod100>=11&&mod100<=14)return"файлов";
+if(mod10===1)return"файл";
+if(mod10>=2&&mod10<=4)return"файла";
+return"файлов";
+}
+
+function addBatchFiles(fileList){
+var added=false;
+for(var i=0;i<fileList.length;i++){
+var f=fileList[i];
+var ok=f.type==="application/pdf"||(f.name&&f.name.toLowerCase().endsWith(".pdf"));
+if(ok){batchFiles.push(f);added=true;}
+}
+if(added){
+renderBatchList();
+showState("batch-list");
+}else if(!batchFiles.length){
+showError($errorInit,"Пожалуйста, выберите PDF-файлы. Другие форматы не поддерживаются.");
+}
+}
+
+function renderBatchList(){
+var $list=document.getElementById("batch-file-list");
+$list.innerHTML="";
+batchFiles.forEach(function(f,idx){
+var row=document.createElement("div");
+row.className="batch-row";
+var name=document.createElement("span");
+name.className="batch-row-name";
+name.textContent=f.name;
+var size=document.createElement("span");
+size.className="batch-row-size";
+size.textContent=Math.max(1,Math.round(f.size/1024))+" КБ";
+var rm=document.createElement("button");
+rm.type="button";
+rm.className="btn btn-ghost btn-small batch-row-remove";
+rm.setAttribute("aria-label","Удалить "+f.name+" из списка");
+rm.textContent="✕";
+rm.addEventListener("click",function(){
+batchFiles.splice(idx,1);
+if(batchFiles.length===0){showState("initial");}else{renderBatchList();}
+});
+row.appendChild(name);row.appendChild(size);row.appendChild(rm);
+$list.appendChild(row);
+});
+document.getElementById("batch-heading").textContent="Пакетная обработка — "+batchFiles.length+" "+pluralFiles(batchFiles.length);
+var $btnConv=document.getElementById("btn-batch-convert");
+$btnConv.textContent="Конвертировать все ("+batchFiles.length+")";
+$btnConv.disabled=batchFiles.length===0;
+}
+
+document.getElementById("btn-batch-cancel").addEventListener("click",function(){
+batchFiles=[];
+showState("initial");
+});
+
+var $batchModeRadios=document.querySelectorAll('input[name="batch-convert-mode"]');
+$batchModeRadios.forEach(function(radio){
+radio.addEventListener("change",function(){
+document.getElementById("batch-mode-opt-fixed").classList.toggle("selected",document.querySelector('input[name="batch-convert-mode"][value="fixed"]').checked);
+document.getElementById("batch-mode-opt-text").classList.toggle("selected",document.querySelector('input[name="batch-convert-mode"][value="text"]').checked);
+});
+});
+
+document.getElementById("btn-batch-convert").addEventListener("click",startBatchConvert);
+
+async function startBatchConvert(){
+if(!batchFiles.length)return;
+try{
+var author=document.getElementById("batch-inp-author").value.trim();
+var lang=document.getElementById("batch-inp-lang").value;
+var modeEl=document.querySelector('input[name="batch-convert-mode"]:checked');
+var mode=modeEl?modeEl.value:"fixed";
+var files=batchFiles.slice();
+var N=files.length;
+var results=[];
+
+showState("batch-converting");
+var $overall=document.getElementById("batch-conv-overall");
+var $pageStatus=document.getElementById("batch-conv-page");
+var $batchBar=document.getElementById("batch-progress-bar");
+
+for(var i=0;i<N;i++){
+var f=files[i];
+$overall.textContent="Файл "+(i+1)+" из "+N+": "+f.name;
+$ariaStatus.textContent="Файл "+(i+1)+" из "+N+": "+f.name;
+$pageStatus.textContent="Открываем PDF…";
+$batchBar.style.width=(i/N*100).toFixed(1)+"%";
+
+try{
+var buf=await f.arrayBuffer();
+var doc=await pdfjsLib.getDocument({data:buf}).promise;
+var title=f.name.replace(/\.pdf$/i,"")||"book";
+var res=await convertPdfToEpub(doc,{
+mode:mode,title:title,author:author,lang:lang,
+onProgress:function(pi,total,phase){
+if(phase==="pages"){
+$pageStatus.textContent="Обработка страницы "+pi+" из "+total;
+}else{
+$pageStatus.textContent="Собираем EPUB…";
+}
+}
+});
+var safeName=sanitizeFilename(title);
+results.push({name:(safeName||"book")+".epub",blob:res.blob,error:null});
+}catch(fileErr){
+results.push({name:f.name,blob:null,error:(fileErr&&fileErr.message)||"неизвестная ошибка"});
+}
+
+$batchBar.style.width=((i+1)/N*100).toFixed(1)+"%";
+}
+
+batchResults=results;
+renderBatchResults(results);
+showState("batch-done");
+
+}catch(err){
+showState("batch-list");
+showError($errorBatch,"Ошибка пакетной обработки: "+(err&&err.message||"неизвестная ошибка"));
+console.error(err);
+}
+}
+
+function renderBatchResults(results){
+var success=results.filter(function(r){return!r.error;}).length;
+document.getElementById("batch-done-heading").textContent="Готово: "+success+" из "+results.length;
+var $list=document.getElementById("batch-results-list");
+$list.innerHTML="";
+results.forEach(function(r){
+var row=document.createElement("div");
+row.className="batch-result-row";
+var name=document.createElement("span");
+name.className="batch-row-name";
+name.textContent=r.name;
+row.appendChild(name);
+if(r.error){
+var note=document.createElement("span");
+note.className="batch-error-note";
+note.textContent="Ошибка: "+r.error;
+row.appendChild(note);
+}else{
+var dl=document.createElement("button");
+dl.type="button";
+dl.className="btn btn-ghost btn-small";
+dl.textContent="Скачать";
+dl.addEventListener("click",function(){
+var url=URL.createObjectURL(r.blob);
+triggerDownload(url,r.name);
+setTimeout(function(){URL.revokeObjectURL(url);},4000);
+});
+row.appendChild(dl);
+}
+$list.appendChild(row);
+});
+document.getElementById("btn-batch-download-all").disabled=success===0;
+}
+
+function zipHasName(zip,name){return!!zip.files[name];}
+
+document.getElementById("btn-batch-download-all").addEventListener("click",async function(){
+var ok=batchResults.filter(function(r){return!r.error;});
+if(!ok.length)return;
+var outer=new JSZip();
+for(var i=0;i<ok.length;i++){
+var finalName=ok[i].name;
+var n=1;
+while(zipHasName(outer,finalName)){
+n++;
+finalName=ok[i].name.replace(/\.epub$/i,"")+"-"+n+".epub";
+}
+outer.file(finalName,ok[i].blob);
+}
+var zipBlob=await outer.generateAsync({type:"blob"});
+var url=URL.createObjectURL(zipBlob);
+triggerDownload(url,"books.zip");
+setTimeout(function(){URL.revokeObjectURL(url);},4000);
+});
+
+document.getElementById("btn-batch-reset").addEventListener("click",function(){
+batchFiles=[];
+batchResults=[];
 showState("initial");
 });
 
