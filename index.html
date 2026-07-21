@@ -623,8 +623,9 @@ onProgress(i,N,"pages");
 
 var page=await pdfDoc.getPage(i);
 var base=page.getViewport({scale:1});
-var targetWidth=2200;
-var scale=Math.min(3.2,Math.max(1.6,targetWidth/base.width));
+var maxDim=2048;
+var scale=Math.min(3.0,maxDim/base.width,maxDim/base.height);
+scale=Math.max(1.6,scale);
 var vp=page.getViewport({scale:scale});
 
 canvas.width=Math.round(vp.width);
@@ -960,7 +961,7 @@ s+='<dc:date>'+dateOnly+'</dc:date>\n';
 s+='<meta property="dcterms:modified">'+isoDate+'</meta>\n';
 s+='<meta property="rendition:layout">pre-paginated</meta>\n';
 s+='<meta property="rendition:orientation">auto</meta>\n';
-s+='<meta property="rendition:spread">auto</meta>\n';
+s+='<meta property="rendition:spread">none</meta>\n';
 s+='</metadata>\n';
 
 s+='<manifest>\n';
